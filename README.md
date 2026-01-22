@@ -6,9 +6,10 @@ A Node.js application that bridges Victron solar charge controller data to a Mes
 
 - 📡 **Meshtastic Integration** - Connects to a Meshtastic node via TCP and sends telemetry data
 - 🔋 **Victron BLE Support** - Reads real-time data from Victron solar charge controllers via Bluetooth
-- 📊 **Telemetry Broadcasting** - Sends DeviceMetrics and PowerMetrics as Meshtastic Telemetry packets
+- 📊 **Telemetry Broadcasting** - Sends DeviceMetrics as Meshtastic Telemetry packets
 - ⚙️ **Remote Configuration** - Configure the script remotely via Meshtastic messages
 - 🧪 **Mock Mode** - Test without a physical Victron device using simulated data
+- 💾 **Persistent Config** - All settings stored in `config.json`
 
 ## Requirements
 
@@ -27,32 +28,30 @@ npm install
 
 ## Configuration
 
-Edit `config.json` to customize the behavior:
+All settings are managed via `config.json`:
 
 ```json
 {
-  "sendInterval": 300000,    // Telemetry send interval in ms (default: 5 min)
-  "useMockVictron": false,   // Use simulated Victron data for testing
-  "sendData": true,          // Enable/disable automatic data sending
-  "meshChannel": 1           // Meshtastic channel index for messages
+  "sendInterval": 300000,              // Telemetry send interval in ms (default: 5 min)
+  "useMockVictron": false,             // Use simulated Victron data for testing
+  "sendData": true,                    // Enable/disable automatic data sending
+  "meshChannel": 1,                    // Meshtastic channel for text messages
+  "telemetryMeshChannel": 0,           // Meshtastic channel for telemetry (-1 to disable)
+  "batteryBatteryLevelHigh": 16.8,     // Voltage at 100% SOC
+  "batteryBatteryLevelLow": 12.8,      // Voltage at 0% SOC
+  "victronCliPath": "victron-ble",     // Path to victron-ble CLI
+  "victronMacAddr": "C8:6E:AB:50:70:9A",  // Victron device MAC address
+  "victronPasskey": "your-passkey-here",  // Victron BLE encryption key
+  "meshtasticIp": "192.168.178.123"    // IP address of Meshtastic node
 }
 ```
 
-### Victron Setup
+### Getting Victron BLE Credentials
 
-Update the Victron BLE address and encryption key in `index.js`:
-
-```javascript
-const victronArgs = ["read", "<MAC_ADDRESS>@<ENCRYPTION_KEY>"];
-```
-
-### Meshtastic Setup
-
-Update the IP address of your Meshtastic node:
-
-```javascript
-const transport = await TransportNode.create("192.168.178.123");
-```
+1. Install the VictronConnect app on your phone
+2. Connect to your Victron device
+3. Go to Settings → Product Info → Show to find the encryption key
+4. The MAC address can be found via Bluetooth scanning or in VictronConnect
 
 ## Usage
 
@@ -62,27 +61,22 @@ node index.js
 
 The script will:
 1. Connect to the Meshtastic node via TCP
-2. Start reading Victron data (or mock data)
+2. Start reading Victron data (or mock data if `useMockVictron: true`)
 3. Periodically send telemetry to the mesh network
+4. Listen for remote configuration commands
 
 ## Telemetry Data
 
-The script sends two types of Meshtastic telemetry packets:
+The script sends **DeviceMetrics** telemetry packets containing:
 
-### DeviceMetrics
-- `voltage` - Battery voltage
-- `batteryLevel` - State of Charge (0-100%) calculated for a 4S Li-Ion pack
-
-### PowerMetrics
-| Channel | Description | Voltage | Current |
-|---------|-------------|---------|---------|
-| ch1 | Battery | Battery voltage | Charging current |
-| ch2 | Solar | Calculated solar voltage | Solar current |
-| ch3 | Load | Battery voltage | Device load current |
+| Field | Description |
+|-------|-------------|
+| `voltage` | Battery voltage (V) |
+| `batteryLevel` | State of Charge (0-100%) |
 
 ## Remote Commands
 
-Send messages on the configured mesh channel to control the script:
+Send messages on the configured `meshChannel` to control the script:
 
 | Command | Description |
 |---------|-------------|
@@ -92,11 +86,25 @@ Send messages on the configured mesh channel to control the script:
 
 ## Battery SOC Calculation
 
-The State of Charge is calculated for a **4S Li-Ion battery pack**:
-- 100% = 16.8V (4 × 4.2V)
-- 0% = 12.0V (4 × 3.0V)
+The State of Charge is calculated using configurable voltage thresholds:
 
-Linear interpolation is used between these values.
+- **100%** = `batteryBatteryLevelHigh` (default: 16.8V for 4S Li-Ion)
+- **0%** = `batteryBatteryLevelLow` (default: 12.8V for 4S Li-Ion)
+
+Linear interpolation:
+$$SOC = \frac{V_{current} - V_{low}}{V_{high} - V_{low}} \times 100$$
+
+## Victron Data Fields
+
+The script reads the following data from Victron devices:
+
+- `battery_voltage` - Current battery voltage
+- `battery_charging_current` - Charging current from solar
+- `external_device_load` - Current draw from connected loads
+- `solar_power` - Solar panel power output (W)
+- `yield_today` - Total energy harvested today (Wh)
+- `charge_state` - Charging state (bulk, absorption, float, etc.)
+- `charger_error` - Error codes if any
 
 ## Dependencies
 
