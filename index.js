@@ -1,34 +1,54 @@
-const cliCommandVictron = '/home/pi/.local/bin/victron-ble'
-const victronArgs = ["read", "C8:6E:AB:50:70:9A@c806eba2c95e6b55907348bb3a52d45d"];
-
-const meshtasticCmd = 'meshtastic'
-const meshtasticArgs = ["--ch-index=1", "--sendtext"]
 
 import * as Protobuf from "@meshtastic/protobufs";
 import { create, toBinary } from "@bufbuild/protobuf";
 
 import { MeshDevice, Protobuf as CoreProtobuf } from "@meshtastic/core";
 import { TransportNode } from "@meshtastic/transport-node";
-import { TransportHTTP } from "@meshtastic/transport-http";
 
 // Telemetry Schemas aus dem Protobuf Namespace
 const { TelemetrySchema, DeviceMetricsSchema, PowerMetricsSchema } = Protobuf.Telemetry;
 
+var config = {
+	sendInterval: 600000,
+	useMockVictron: false,
+	sendData: true,
+	meshChannel: 1,
+	victronCliPath: 'victron-ble',
+	victronMacAddr: null,
+	victronPasskey: null,
+	meshtasticIp: 'localhost'
+};
 
-const transport = await TransportNode.create("192.168.178.123");
+
+
+
+function loadConfig() {
+	// Here you can load configuration from a file or environment variables
+	// For simplicity, we are using hardcoded values in this example
+	const configPath = './config.json';
+	if (fs.existsSync(configPath)) {
+		const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+		config = { ...config, ...fileConfig };
+	} else {
+		saveConfig(); // Save default config if file doesn't exist
+	}
+	console.log("Loaded config:", config);
+}
+
+function saveConfig() {
+	const configPath = './config.json';
+	fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+	console.log("Saved config:", config);
+}
+
+loadConfig();
+
+const transport = await TransportNode.create(config.meshtasticIp);
 const device = new MeshDevice(transport);
 
-
-// Event-Handler registrieren
-//device.events.onDeviceStatus.subscribe((status) => console.log("DeviceStatus:", status))
 device.events.onMessagePacket.subscribe(handleMessagePacket);
-//device.events.onUserPacket.subscribe((event) => console.log("UserPacket", event))
-//device.events.onPrivatePacket.subscribe((event) => console.log("PrivatePacket", event))
-//device.events.onChannelPacket.subscribe((event) => console.log("ChannelPacket", event))
-//device.events.onFromRadio.subscribe((event) => console.log("FromRadio", event))
-//device.events.onLogEvent.subscribe((event) => console.log("Log", event))
 
-// Konfiguration vom Gerät anfordern - WICHTIG für den Empfang!
+
 function configure() {
 	device.configure().then(() => {
 		console.log("Configuration applied");
@@ -44,8 +64,8 @@ function batteryPercentageFromVoltage(voltage) {
 	// Berechnet den State of Charge (SOC) für ein 4S Li-Ion Pack
 	// 4S voll: 4.2V × 4 = 16.8V
 	// 4S leer: 3.0V × 4 = 12.0V (konservativ: 3.2V × 4 = 12.8V)
-	const level_high = 16.8;
-	const level_low = 12.0;
+	const level_high = config.batteryBatteryLevelHigh;
+	const level_low = config.batteryBatteryLevelLow;
 	
 	if (voltage >= level_high) return 100;
 	if (voltage <= level_low) return 0;
@@ -64,11 +84,7 @@ async function sendTelemetry() {
 	}
 	
 	// Solar-Berechnungen
-	const solar_current = parseFloat(newVicData.battery_charging_current) - parseFloat(newVicData.external_device_load);
-	const solar_voltage = parseFloat(newVicData.solar_power) / (solar_current || 1); // Vermeide Division durch Null
 	const battery_voltage = parseFloat(newVicData.battery_voltage);
-	const battery_current = parseFloat(newVicData.battery_charging_current);
-	const load_current = parseFloat(newVicData.external_device_load);
 	
 	// Erstelle DeviceMetrics mit Batterie-Informationen
 	const deviceMetrics = create(DeviceMetricsSchema, {
@@ -76,16 +92,7 @@ async function sendTelemetry() {
 		batteryLevel: batteryPercentageFromVoltage(battery_voltage)
 	});
 
-	// Erstelle PowerMetrics für Solar und Batterie
-	// ch1 = Batterie, ch2 = Solar, ch3 = Verbraucher (Last)
-	const powerMetrics = create(PowerMetricsSchema, {
-		ch1Voltage: battery_voltage,
-		ch1Current: battery_current,
-		ch2Voltage: solar_voltage,
-		ch2Current: solar_current,
-		ch3Voltage: battery_voltage,  // Verbraucher hängen an der Batterie
-		ch3Current: load_current
-	});
+	
 
 	// Erstelle das Telemetry-Paket mit deviceMetrics
 	const deviceTelemetry = create(TelemetrySchema, {
@@ -197,36 +204,6 @@ import fs from 'fs';
 
 var child = null;
 
-var config = {
-	sendInterval: 30000,
-	useMockVictron: false,
-	sendData: true,
-	meshChannel: 1
-};
-
-
-
-
-function loadConfig() {
-	// Here you can load configuration from a file or environment variables
-	// For simplicity, we are using hardcoded values in this example
-	const configPath = './config.json';
-	if (fs.existsSync(configPath)) {
-		const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-		config = { ...config, ...fileConfig };
-	} else {
-		saveConfig(); // Save default config if file doesn't exist
-	}
-	console.log("Loaded config:", config);
-}
-
-function saveConfig() {
-	const configPath = './config.json';
-	fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-	console.log("Saved config:", config);
-}
-
-loadConfig();
 
 
 function sendMessage(text, cb) {
@@ -345,7 +322,7 @@ if (config.useMockVictron) {
 
 function startVictronChildProcess() {
 	// Already started above
-	child = spawn(cliCommandVictron, victronArgs);
+	child = spawn(config.victronCliPath, ["read", config.victronMacAddr + "@" + config.victronPasskey]);
 
 	child.stdout.setEncoding('utf8');
 	child.stdout.on('data', function (data) {

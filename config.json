@@ -1,7 +1,10 @@
 {
-  "sendInterval": 300000,
+  "sendInterval": 600000,
   "useMockVictron": false,
   "sendData": true,
   "meshChannel": 1,
-  "sendEnabled": true
+  "victronCliPath": "victron-ble",
+  "victronMacAddr": null,
+  "victronPasskey": null,
+  "meshtasticIp": "localhost"
 }
