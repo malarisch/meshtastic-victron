@@ -13,6 +13,9 @@ var config = {
 	useMockVictron: false,
 	sendData: true,
 	meshChannel: 1,
+	telemetryMeshChannel: 0,
+	batteryBatteryLevelHigh: 16.8, // Volt
+	batteryBatteryLevelLow: 12.8,  // Volt
 	victronCliPath: 'victron-ble',
 	victronMacAddr: null,
 	victronPasskey: null,
@@ -77,6 +80,10 @@ function batteryPercentageFromVoltage(voltage) {
 
 async function sendTelemetry() {
 	// Hole die neuesten Victron-Daten
+	if (config.telemetryMeshChannel == -1 || config.telemetryMeshChannel === undefined) {
+		console.log("Telemetry mesh channel not set, skipping telemetry send");
+		return;
+	}
 	newVicData = getAccumulatedVictronData()
 	if (!newVicData || newVicData.packet_count === 0) {
 		console.log("No Victron data available for telemetry");
@@ -103,14 +110,6 @@ async function sendTelemetry() {
 		}
 	});
 
-	// Erstelle das Telemetry-Paket mit powerMetrics
-	const powerTelemetry = create(TelemetrySchema, {
-		time: Math.floor(Date.now() / 1000),
-		variant: {
-			case: "powerMetrics",
-			value: powerMetrics
-		}
-	});
 
 	try {
 		// Sende DeviceMetrics
@@ -119,7 +118,7 @@ async function sendTelemetry() {
 			deviceTelemetryBytes,
 			CoreProtobuf.Portnums.PortNum.TELEMETRY_APP,
 			"broadcast",
-			config.meshChannel,
+			config.telemetryMeshChannel,
 			false,  // wantAck
 			false   // wantResponse
 		);
