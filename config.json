@@ -1,0 +1,7 @@
+{
+  "sendInterval": 300000,
+  "useMockVictron": true,
+  "sendData": true,
+  "meshChannel": 1,
+  "sendEnabled": true
+}

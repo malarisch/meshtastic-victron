@@ -1,0 +1,18 @@
+{
+  "name": "meshtastic-victron",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@meshtastic/core": "^2.6.7",
+    "@meshtastic/protobufs": "^2.7.8",
+    "@meshtastic/transport-http": "^0.2.5",
+    "@meshtastic/transport-node": "^0.0.2"
+  }
+}
